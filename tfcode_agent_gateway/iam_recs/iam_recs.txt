@@ -1,0 +1,3 @@
+{
+  "[cloud_iam.policy_ai.iampolicyai.IacRolesAdditionalInfo.additional_info]": {}
+}
