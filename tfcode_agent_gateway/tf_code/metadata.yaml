@@ -1,0 +1,155 @@
+# This metadata.yaml file is for the terraform-google-agent-gateway module.
+# It follows the TF Blueprint Metadata standard.
+apiVersion: blueprints.cloud.google.com/v1alpha1
+kind: BlueprintMetadata
+metadata:
+  name: terraform-google-agent-gateway
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  info:
+    title: Agent Gateway
+    version: 1.0.0
+    source:
+      repo: https://github.com/GoogleCloudPlatform/terraform-google-agent-gateway.git # Replace with actual repo URL
+      type: git
+    actuationTool:
+      type: terraform
+      version: ">= 1.0"
+    description:
+      tagline: A flexible module to create external, internal, or API-based gateways for agent systems on Google Cloud.
+      detailed: |
+        The agent_gateway module provides a flexible interface for creating various types of gateways for agent-based systems on Google Cloud.
+        It supports three primary patterns, selectable via the `gateway_type` variable:
+        1.  `EXTERNAL_GLOBAL`: A highly available, global gateway using a Global External HTTPS Load Balancer. It provides a static IP, managed SSL, and optional Cloud Armor protection. Ideal for agents communicating over the public internet.
+        2.  `API_GATEWAY`: A fully managed, serverless gateway using Google Cloud API Gateway. It uses an OpenAPI specification to define the API surface and is suitable for agents submitting structured data to serverless backends like Cloud Functions.
+        3.  `INTERNAL_REGIONAL_IAP`: A regional, private gateway using an Internal HTTPS Load Balancer protected by Identity-Aware Proxy (IAP). This ensures that only authenticated agents (e.g., those with a specific service account) can access internal backend services.
+        This module encapsulates the complexity of setting up these different gateway types, allowing users to select the appropriate pattern for their architecture with a consistent interface.
+  interfaces:
+    variables:
+      - name: name
+        description: A unique name for the agent gateway component, used as a prefix for all created resources.
+        type: STRING
+        required: true
+      - name: project_id
+        description: The GCP project ID where the gateway and its resources will be created.
+        type: STRING
+        required: true
+      - name: gateway_type
+        description: "The type of agent gateway to deploy. Must be one of: EXTERNAL_GLOBAL, API_GATEWAY, INTERNAL_REGIONAL_IAP."
+        type: STRING
+        required: true
+      - name: labels
+        description: A map of labels to apply to the created resources.
+        type: MAP_STRING
+        default: {}
+        required: false
+      - name: region
+        description: The GCP region for regional resources. Required when gateway_type is API_GATEWAY or INTERNAL_REGIONAL_IAP.
+        type: STRING
+        required: true
+      - name: backend_service_id
+        description: The self-link of the external backend service to which the gateway will forward traffic. Required for EXTERNAL_GLOBAL type.
+        type: STRING
+        required: true
+      - name: gateway_domain_name
+        description: The domain name for which the managed SSL certificate will be provisioned. Required for EXTERNAL_GLOBAL type.
+        type: STRING
+        required: true
+      - name: create_cloud_armor_policy
+        description: If true, creates a basic Cloud Armor security policy with a default allow rule and a configurable deny rule.
+        type: BOOL
+        default: true
+        required: false
+      - name: cloud_armor_source_ip_ranges_deny
+        description: A list of IP address ranges in CIDR format to block in the Cloud Armor security policy.
+        type: LIST_STRING
+        default: ["192.0.2.0/24"]
+        required: false
+      - name: openapi_spec_contents
+        description: "The string content of the OpenAPI v2 specification. Use the placeholder '$${backend_address}' to have it replaced by `backend_target_address`. Required for API_GATEWAY type."
+        type: STRING
+        required: true
+      - name: backend_target_address
+        description: "The backend address (e.g., a Cloud Function trigger URL) to be injected into the OpenAPI spec where '$${backend_address}' is specified. Required for API_GATEWAY type."
+        type: STRING
+        required: true
+      - name: network_id
+        description: The self-link of the VPC network for the internal load balancer. Required for INTERNAL_REGIONAL_IAP type.
+        type: STRING
+        required: true
+      - name: subnetwork_id
+        description: The self-link of the subnetwork for the internal load balancer. Required for INTERNAL_REGIONAL_IAP type.
+        type: STRING
+        required: true
+      - name: backend_service_groups
+        description: A list of instance group URLs to be used as backends for the internal backend service. Required for INTERNAL_REGIONAL_IAP type.
+        type: LIST_STRING
+        default: []
+        required: false
+      - name: health_check_id
+        description: The self-link of the health check to use for the internal backend service. Required for INTERNAL_REGIONAL_IAP type.
+        type: STRING
+        required: true
+      - name: self_managed_ssl_cert_id
+        description: The self-link of the self-managed SSL certificate for the internal gateway's target proxy. Required for INTERNAL_REGIONAL_IAP type.
+        type: STRING
+        required: true
+      - name: iap_oauth2_client_id
+        description: The OAuth2 client ID for IAP. Required for INTERNAL_REGIONAL_IAP type. This is created in the GCP console after configuring the OAuth consent screen.
+        type: STRING
+        required: true
+      - name: iap_oauth2_client_secret
+        description: The OAuth2 client secret for IAP. Required for INTERNAL_REGIONAL_IAP type. This is created in the GCP console after configuring the OAuth consent screen.
+        type: STRING
+        required: true
+      - name: agent_service_account_email
+        description: The email of the service account used by agents, which will be granted access via IAP. Required for INTERNAL_REGIONAL_IAP type.
+        type: STRING
+        required: true
+    variableGroups:
+      - name: general
+        displayName: Basic Configuration
+        description: General settings for the agent gateway.
+        variables: [name, project_id, gateway_type, labels]
+      - name: external_global
+        displayName: External Global Gateway (EXTERNAL_GLOBAL)
+        description: Settings for the Global External HTTPS Load Balancer.
+        variables: [gateway_domain_name, backend_service_id, create_cloud_armor_policy, cloud_armor_source_ip_ranges_deny]
+      - name: api_gateway
+        displayName: API Gateway (API_GATEWAY)
+        description: Settings for the serverless Google Cloud API Gateway.
+        variables: [region, openapi_spec_contents, backend_target_address]
+      - name: internal_regional_iap
+        displayName: Internal Regional Gateway (INTERNAL_REGIONAL_IAP)
+        description: Settings for the Internal HTTPS Load Balancer with IAP.
+        variables: [region, network_id, subnetwork_id, backend_service_groups, health_check_id, self_managed_ssl_cert_id, iap_oauth2_client_id, iap_oauth2_client_secret, agent_service_account_email]
+    outputs:
+      - name: external_gateway_ip_address
+        description: The global static IP address of the external gateway. Populated only when gateway_type is EXTERNAL_GLOBAL.
+      - name: cloud_armor_policy_id
+        description: The ID of the created Cloud Armor security policy. This policy needs to be manually attached to your backend service. Populated only when gateway_type is EXTERNAL_GLOBAL and create_cloud_armor_policy is true.
+      - name: api_gateway_hostname
+        description: The default hostname of the deployed API Gateway. Populated only when gateway_type is API_GATEWAY.
+      - name: api_gateway_name
+        description: The resource name of the deployed API Gateway.
+      - name: internal_gateway_ip_address
+        description: The internal IP address of the IAP-protected gateway. Populated only when gateway_type is INTERNAL_REGIONAL_IAP.
+      - name: iap_backend_service_id
+        description: The ID of the IAP-enabled regional backend service created for the internal gateway. Populated only when gateway_type is INTERNAL_REGIONAL_IAP.
+  requirements:
+    roles:
+      - level: project
+        roles:
+          - roles/compute.networkAdmin
+          - roles/compute.securityAdmin
+          - roles/apigateway.admin
+          - roles/iap.admin
+          - roles/iam.serviceAccountUser
+    services:
+      - compute.googleapis.com
+      - apigateway.googleapis.com
+      - iap.googleapis.com
+      - iam.googleapis.com
+      - servicemanagement.googleapis.com
+      - servicecontrol.googleapis.com
